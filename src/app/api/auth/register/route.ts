@@ -8,18 +8,18 @@ export async function POST(request: Request) {
   const email = body?.email?.trim().toLowerCase() || null;
   const password = body?.password || "";
 
-  if (!username || !/^[a-z0-9_.-]{3,24}$/.test(username)) return NextResponse.json({ error: "El usuario debe tener entre 3 y 24 caracteres válidos." }, { status: 400 });
-  if (password.length < 8) return NextResponse.json({ error: "La contraseña debe tener al menos 8 caracteres." }, { status: 400 });
+  if (!username || !/^[a-z0-9_.-]{3,24}$/.test(username)) return NextResponse.json({ error: "El usuario debe tener entre 3 y 24 caracteres vÃ¡lidos." }, { status: 400 });
+  if (password.length < 8) return NextResponse.json({ error: "La contraseÃ±a debe tener al menos 8 caracteres." }, { status: 400 });
 
   const supabase = getSupabaseAdmin();
-  if (!supabase) return NextResponse.json({ error: "La base de datos aún no está configurada." }, { status: 503 });
+  if (!supabase) return NextResponse.json({ error: "La base de datos aÃºn no estÃ¡ configurada." }, { status: 503 });
 
-  const { data: user, error } = await supabase.from("app_users").insert({ username, email, password_hash: hashPassword(password), display_name: username }).select("id, username, display_name").single();
+  const { data: user, error } = await supabase.from("fantasy_users").insert({ username, email, password_hash: hashPassword(password), display_name: username }).select("id, username, display_name").single();
   if (error) return NextResponse.json({ error: error.code === "23505" ? "Ese usuario o correo ya existe." : "No se pudo crear la cuenta." }, { status: 400 });
 
   const { token, tokenHash } = createSessionToken();
   const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30);
-  await supabase.from("app_sessions").insert({ user_id: user.id, token_hash: tokenHash, expires_at: expiresAt.toISOString() });
+  await supabase.from("fantasy_sessions").insert({ user_id: user.id, token_hash: tokenHash, expires_at: expiresAt.toISOString() });
 
   const response = NextResponse.json({ user });
   response.cookies.set("stratos_session", token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", expires: expiresAt });

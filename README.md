@@ -23,17 +23,19 @@ Abre `http://localhost:3000`. La ruta `/app` tiene un modo demo funcional que pe
 
 ## Base de datos
 
-1. Crea un proyecto en Supabase.
-2. Copia `SUPABASE_URL` y la clave `service_role` en `.env.local`. Esa clave solo debe existir en el servidor.
-3. Vincula el proyecto y aplica la migración:
+El proyecto está preparado para compartir el Supabase `gymlog-web` (`tnuohiyrwnoqsnxyfonn`) sin tocar sus tablas. Todos los objetos de esta aplicación usan el prefijo `fantasy_`.
+
+Fantasy Stratos no necesita la clave global `service_role`. Utiliza una clave publicable junto con `FANTASY_DATABASE_API_SECRET`, una credencial de servidor propia que las políticas RLS solo aceptan en las tablas `fantasy_*`. Esa credencial debe existir únicamente en el servidor y nunca usar el prefijo `NEXT_PUBLIC_`.
+
+Para aplicar futuras migraciones:
 
 ```bash
 npx supabase login
-npx supabase link --project-ref TU_PROJECT_REF
+npx supabase link --project-ref tnuohiyrwnoqsnxyfonn
 npx supabase db push
 ```
 
-Las tablas tienen RLS activado, no conceden acceso a `anon` ni `authenticated`, y solo el backend usa `service_role`. Esto es intencionado porque Fantasy Stratos mantiene su propio sistema de identidad.
+Las tablas tienen RLS activado. El rol `anon` solo puede operar cuando el backend envía la credencial propia de Fantasy; `authenticated` no recibe acceso y las tablas existentes de GymLog conservan sus políticas sin cambios.
 
 ## Datos reales
 
@@ -52,4 +54,4 @@ Importa el repositorio en Vercel, añade las variables de `.env.example` y despl
 
 ## Estado actual
 
-La interfaz completa y el modo demo están listos. El esquema de producción, autenticación propia y sincronización de jugadores reales también están implementados; para activarlos hacen falta las credenciales de Supabase y API-Football.
+La interfaz completa, el esquema de producción y la autenticación propia están conectados y verificados contra Supabase. La sincronización de jugadores reales está implementada y solo necesita `API_FOOTBALL_KEY`.
