@@ -6,15 +6,15 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as { identifier?: string; password?: string } | null;
   const identifier = body?.identifier?.trim().toLowerCase();
   const password = body?.password || "";
-  if (!identifier || !password) return NextResponse.json({ error: "Completa usuario y contraseÃ±a." }, { status: 400 });
+  if (!identifier || !password) return NextResponse.json({ error: "Completa usuario y contraseña." }, { status: 400 });
 
   const supabase = getSupabaseAdmin();
-  if (!supabase) return NextResponse.json({ error: "La base de datos aÃºn no estÃ¡ configurada. Puedes entrar en la demo." }, { status: 503 });
+  if (!supabase) return NextResponse.json({ error: "La base de datos aún no está configurada." }, { status: 503 });
 
   let query = await supabase.from("fantasy_users").select("id, username, display_name, password_hash, is_active").eq("username", identifier).maybeSingle();
   if (!query.data && identifier.includes("@")) query = await supabase.from("fantasy_users").select("id, username, display_name, password_hash, is_active").eq("email", identifier).maybeSingle();
   const user = query.data;
-  if (!user || !user.is_active || !verifyPassword(password, user.password_hash)) return NextResponse.json({ error: "Usuario o contraseÃ±a incorrectos." }, { status: 401 });
+  if (!user || !user.is_active || !verifyPassword(password, user.password_hash)) return NextResponse.json({ error: "Usuario o contraseña incorrectos." }, { status: 401 });
 
   const { token, tokenHash } = createSessionToken();
   const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30);

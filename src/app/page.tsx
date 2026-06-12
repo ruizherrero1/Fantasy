@@ -16,7 +16,7 @@ export default function LandingPage() {
         <Brand />
         <div className="landing-actions">
           <Link className="text-link" href="/login">Entrar</Link>
-          <Link className="button button-small" href="/app">Ver demo</Link>
+          <Link className="button button-small" href="/login">Jugar</Link>
         </div>
       </nav>
 
@@ -26,7 +26,7 @@ export default function LandingPage() {
           <h1>El fantasy de siempre.<br /><em>A vuestra manera.</em></h1>
           <p>Crea una liga privada, ficha a los mejores y demuestra quién sabe realmente de fútbol. Sin ruido. Sin reglas impuestas.</p>
           <div className="hero-actions">
-            <Link className="button" href="/app">Probar la liga demo <ArrowRight size={18} /></Link>
+            <Link className="button" href="/login">Entrar en tu liga <ArrowRight size={18} /></Link>
             <span><Users size={17} /> Preparado para jugar con amigos</span>
           </div>
           <div className="hero-proof">
@@ -56,7 +56,7 @@ export default function LandingPage() {
       </section>
 
       <section className="mobile-band">
-        <div className="wrap mobile-band-inner"><div><span className="eyebrow">Siempre en el bolsillo</span><h2>Diseñado primero para móvil.</h2><p>Revisa el mercado, cambia tu once y recibe avisos antes del cierre de jornada.</p><div className="band-pills"><span><Smartphone size={16} /> Instalable</span><span><Bell size={16} /> Notificaciones</span></div></div><Link className="button button-light" href="/app">Abrir Fantasy <ArrowRight size={18} /></Link></div>
+        <div className="wrap mobile-band-inner"><div><span className="eyebrow">Siempre en el bolsillo</span><h2>Diseñado primero para móvil.</h2><p>Revisa el mercado, cambia tu once y recibe avisos antes del cierre de jornada.</p><div className="band-pills"><span><Smartphone size={16} /> Instalable</span><span><Bell size={16} /> Notificaciones</span></div></div><Link className="button button-light" href="/login">Abrir Fantasy <ArrowRight size={18} /></Link></div>
       </section>
     </main>
   );

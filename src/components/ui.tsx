@@ -1,0 +1,36 @@
+"use client";
+
+import { TrendingDown, TrendingUp } from "lucide-react";
+import { initials } from "@/lib/client";
+import type { ApiPlayer } from "@/lib/types";
+
+export function PlayerAvatar({ player, small = false }: { player: Pick<ApiPlayer, "name" | "teamColor">; small?: boolean }) {
+  return <span className={`player-avatar ${small ? "small" : ""}`} style={{ background: player.teamColor, color: contrast(player.teamColor) }}>{initials(player.name)}</span>;
+}
+
+function contrast(hex: string) {
+  const value = hex.replace("#", "");
+  if (value.length < 6) return "#fff";
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? "#16221a" : "#fff";
+}
+
+export function Trend({ player }: { player: ApiPlayer }) {
+  if (player.lastPoints === null) return null;
+  const positive = player.lastPoints >= 4;
+  return <span className={positive ? "trend up" : "trend down"}>{positive ? <TrendingUp /> : <TrendingDown />}{player.lastPoints} pts</span>;
+}
+
+export function PositionTag({ position }: { position: string }) {
+  return <span className={`position-tag ${position.toLowerCase()}`}>{position}</span>;
+}
+
+export function Toggle({ checked, onChange, label, disabled = false }: { checked: boolean; onChange: () => void; label: string; disabled?: boolean }) {
+  return <button type="button" className={`toggle ${checked ? "on" : ""}`} onClick={onChange} disabled={disabled} aria-label={label} aria-pressed={checked}><span /></button>;
+}
+
+export function SettingRow({ title, text, children }: { title: string; text: string; children: React.ReactNode }) {
+  return <div className="setting-row"><span><strong>{title}</strong><small>{text}</small></span>{children}</div>;
+}

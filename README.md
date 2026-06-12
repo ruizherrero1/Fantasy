@@ -1,6 +1,6 @@
 # Fantasy
 
-Fantasy privado de LaLiga para jugar con amigos. Incluye plantilla y alineaciones, capitán y banquillo configurables, clasificación, jornada, chat, administración, auditoría y cuatro sistemas de mercado: pujas, precio fijo, cláusulas y traspasos directos.
+Fantasy privado de LaLiga para jugar con amigos, al estilo Comunio. Totalmente funcional: ligas privadas con código de invitación, plantillas aleatorias, alineaciones con capitán y banquillo, mercado con cuatro sistemas (pujas, precio fijo, cláusulas y traspasos directos), jornadas con puntos, evolución de valores, clasificación, chat de liga, administración, auditoría y reinicio de liga.
 
 ## Stack
 
@@ -8,24 +8,40 @@ Fantasy privado de LaLiga para jugar con amigos. Incluye plantilla y alineacione
 - Tailwind CSS 4 más un sistema visual propio con cuatro temas
 - Supabase como PostgreSQL gestionado, sin Supabase Auth
 - Autenticación propia con `scrypt`, sesiones revocables y cookies `HttpOnly`
-- API-Football como adaptador inicial de datos reales de LaLiga
-- Vercel como destino recomendado de despliegue
+- Vercel como destino de despliegue (con cron diario para resolver el mercado)
+
+## Cómo se juega
+
+1. Cada usuario se registra en `/login` (usuario o correo + contraseña).
+2. Un usuario crea la liga y comparte el **código de invitación**; el resto se une con él.
+3. Al entrar en una liga, cada mánager recibe una **plantilla aleatoria** de 15 jugadores (2 POR, 5 DEF, 5 MED, 3 DEL) con valor equilibrado, y el resto del presupuesto (100 M€ totales) queda como saldo.
+4. En **Mi plantilla** se elige formación, titulares, banquillo (con sustituciones automáticas) y capitán.
+5. En **Mercado** hay subastas diarias de la liga (pujas ocultas), ventas a precio fijo entre miembros, cláusulas de rescisión y ofertas directas.
+6. El administrador **disputa la jornada** (sección Jornada o Administración): se generan los puntos de todos los jugadores, se actualizan la clasificación y los valores de mercado.
+7. En **Ajustes**, el administrador puede cambiar las reglas y **reiniciar la liga** (nuevas plantillas aleatorias para todos, puntos y mercado a cero).
+
+## Datos de jugadores
+
+Los 20 equipos y ~300 jugadores de LaLiga 2025/26 viven en `src/lib/laliga-data.ts` y se cargan con:
+
+```text
+POST /api/cron/seed-laliga
+Authorization: Bearer <CRON_SECRET>
+```
+
+Las jornadas se simulan internamente con un modelo estadístico (minutos, goles, asistencias, porterías a cero, tarjetas...) y las reglas de puntuación de `src/lib/scoring.ts`. El adaptador de API-Football (`/api/cron/sync-players`) queda preparado por si en el futuro se contrata un plan con datos de la temporada actual: los planes gratuitos no incluyen estadísticas de jugador de la temporada en curso.
 
 ## Desarrollo local
 
 ```bash
 npm install
-copy .env.example .env.local
+copy .env.example .env.local   # y rellena las variables
 npm run dev
 ```
 
-Abre `http://localhost:3000`. La ruta `/app` tiene un modo demo funcional que persiste pujas y ajustes en el navegador.
-
 ## Base de datos
 
-El proyecto está preparado para compartir el Supabase `gymlog-web` (`tnuohiyrwnoqsnxyfonn`) sin tocar sus tablas. Todos los objetos de esta aplicación usan el prefijo `fantasy_`.
-
-Fantasy no necesita la clave global `service_role`. Utiliza una clave publicable junto con `FANTASY_DATABASE_API_SECRET`, una credencial de servidor propia que las políticas RLS solo aceptan en las tablas `fantasy_*`. Esa credencial debe existir únicamente en el servidor y nunca usar el prefijo `NEXT_PUBLIC_`.
+Comparte el proyecto Supabase `gymlog-web` (`tnuohiyrwnoqsnxyfonn`) sin tocar sus tablas: todos los objetos usan el prefijo `fantasy_`. Las tablas tienen RLS y solo aceptan operaciones cuando el backend envía `FANTASY_DATABASE_API_SECRET` (verificado por hash en `private.fantasy_server_config`).
 
 Para aplicar futuras migraciones:
 
@@ -35,23 +51,12 @@ npx supabase link --project-ref tnuohiyrwnoqsnxyfonn
 npx supabase db push
 ```
 
-Las tablas tienen RLS activado. El rol `anon` solo puede operar cuando el backend envía la credencial propia de Fantasy; `authenticated` no recibe acceso y las tablas existentes de GymLog conservan sus políticas sin cambios.
-
-## Datos reales
-
-Configura `API_FOOTBALL_KEY`, `API_FOOTBALL_LALIGA_ID=140` y la temporada. El endpoint protegido de sincronización es:
-
-```text
-POST /api/cron/sync-players?page=1
-Authorization: Bearer <CRON_SECRET>
-```
-
-La respuesta indica `nextPage`; repite la llamada hasta que sea `null`. Los datos deportivos proceden del proveedor y el valor fantasy se calcula internamente con rendimiento, apariciones, goles y asistencias. Las reglas de puntuación viven en `src/lib/scoring.ts` y pueden evolucionar por liga.
+Para rotar el secreto del servidor: genera uno nuevo, actualiza `private.fantasy_server_config.secret_hash` con `extensions.digest('<secreto>', 'sha256')` y cambia la variable en Vercel.
 
 ## Despliegue
 
-Importa el repositorio en Vercel, añade las variables de `.env.example` y despliega. Antes de abrir la liga a los amigos, aplica la migración y crea el primer usuario desde `/login`.
+El proyecto `fantasy` de Vercel despliega `main` automáticamente. Variables necesarias: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `FANTASY_DATABASE_API_SECRET`, `CRON_SECRET` y `NEXT_PUBLIC_APP_URL`. El cron diario (`vercel.json`) resuelve las subastas vencidas y repone el mercado.
 
 ## Estado actual
 
-La interfaz completa, el esquema de producción y la autenticación propia están conectados y verificados contra Supabase. La sincronización de jugadores reales está implementada y solo necesita `API_FOOTBALL_KEY`.
+Aplicación completa y operativa en producción, con la liga **Stratos League** creada y cuatro mánagers dados de alta.
