@@ -1,4 +1,4 @@
-# Fantasy Stratos
+# Fantasy
 
 Fantasy privado de LaLiga para jugar con amigos. Incluye plantilla y alineaciones, capitán y banquillo configurables, clasificación, jornada, chat, administración, auditoría y cuatro sistemas de mercado: pujas, precio fijo, cláusulas y traspasos directos.
 
@@ -25,7 +25,7 @@ Abre `http://localhost:3000`. La ruta `/app` tiene un modo demo funcional que pe
 
 El proyecto está preparado para compartir el Supabase `gymlog-web` (`tnuohiyrwnoqsnxyfonn`) sin tocar sus tablas. Todos los objetos de esta aplicación usan el prefijo `fantasy_`.
 
-Fantasy Stratos no necesita la clave global `service_role`. Utiliza una clave publicable junto con `FANTASY_DATABASE_API_SECRET`, una credencial de servidor propia que las políticas RLS solo aceptan en las tablas `fantasy_*`. Esa credencial debe existir únicamente en el servidor y nunca usar el prefijo `NEXT_PUBLIC_`.
+Fantasy no necesita la clave global `service_role`. Utiliza una clave publicable junto con `FANTASY_DATABASE_API_SECRET`, una credencial de servidor propia que las políticas RLS solo aceptan en las tablas `fantasy_*`. Esa credencial debe existir únicamente en el servidor y nunca usar el prefijo `NEXT_PUBLIC_`.
 
 Para aplicar futuras migraciones:
 

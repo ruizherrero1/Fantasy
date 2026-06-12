@@ -1,6 +1,6 @@
 {
-  "name": "Fantasy Stratos",
-  "short_name": "Stratos",
+  "name": "Fantasy",
+  "short_name": "Fantasy",
   "description": "Fantasy privado de fútbol para jugar con amigos",
   "start_url": "/app",
   "display": "standalone",

@@ -9,3 +9,5 @@ out
 supabase/.temp/
 coverage
 .DS_Store
+
+.vercel

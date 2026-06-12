@@ -36,7 +36,7 @@ export default function LandingPage() {
           </div>
         </div>
 
-        <div className="hero-visual" aria-label="Vista previa de Fantasy Stratos">
+        <div className="hero-visual" aria-label="Vista previa de Fantasy">
           <div className="orb orb-one" /><div className="orb orb-two" />
           <div className="preview-card preview-main">
             <div className="preview-head"><Brand compact /><span>Jornada 32</span></div>
@@ -45,7 +45,7 @@ export default function LandingPage() {
               {["LY", "KM", "PE", "JB", "ÁB", "AB", "RL", "PC", "DC", "US"].map((p, i) => <i key={p} style={{ left: `${18 + (i % 4) * 22}%`, top: `${8 + Math.floor(i / 4) * 29}%` }}>{p}</i>)}
             </div>
           </div>
-          <div className="preview-card preview-rank"><span>CLASIFICACIÓN</span><strong>1º</strong><small>Stratos United</small></div>
+          <div className="preview-card preview-rank"><span>CLASIFICACIÓN</span><strong>1º</strong><small>Fantasy United</small></div>
           <div className="preview-card preview-bid"><Gavel size={18} /><span>Oferta ganada</span><strong>Nico Williams</strong><small>16,2 M€</small></div>
         </div>
       </section>
@@ -56,7 +56,7 @@ export default function LandingPage() {
       </section>
 
       <section className="mobile-band">
-        <div className="wrap mobile-band-inner"><div><span className="eyebrow">Siempre en el bolsillo</span><h2>Diseñado primero para móvil.</h2><p>Revisa el mercado, cambia tu once y recibe avisos antes del cierre de jornada.</p><div className="band-pills"><span><Smartphone size={16} /> Instalable</span><span><Bell size={16} /> Notificaciones</span></div></div><Link className="button button-light" href="/app">Abrir Fantasy Stratos <ArrowRight size={18} /></Link></div>
+        <div className="wrap mobile-band-inner"><div><span className="eyebrow">Siempre en el bolsillo</span><h2>Diseñado primero para móvil.</h2><p>Revisa el mercado, cambia tu once y recibe avisos antes del cierre de jornada.</p><div className="band-pills"><span><Smartphone size={16} /> Instalable</span><span><Bell size={16} /> Notificaciones</span></div></div><Link className="button button-light" href="/app">Abrir Fantasy <ArrowRight size={18} /></Link></div>
       </section>
     </main>
   );

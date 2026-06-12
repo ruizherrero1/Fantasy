@@ -42,7 +42,7 @@ export const marketPlayers: Player[] = [
 ];
 
 export const standings = [
-  { rank: 1, name: "Stratos United", manager: "Ramón", points: 1684, round: 74, budget: 16.4, color: "#b8f35a" },
+  { rank: 1, name: "Fantasy United", manager: "Ramón", points: 1684, round: 74, budget: 16.4, color: "#b8f35a" },
   { rank: 2, name: "Tiki Taka FC", manager: "Javi", points: 1621, round: 68, budget: 9.7, color: "#65d5ff" },
   { rank: 3, name: "Los Galácticos", manager: "Laura", points: 1579, round: 81, budget: 21.2, color: "#a58cff" },
   { rank: 4, name: "Patapum CF", manager: "Álvaro", points: 1512, round: 59, budget: 6.8, color: "#ff9c72" },

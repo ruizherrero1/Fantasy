@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Fantasy Stratos",
+  title: "Fantasy",
   description: "Tu liga fantasy privada, a vuestra manera.",
-  applicationName: "Fantasy Stratos",
+  applicationName: "Fantasy",
   manifest: "/manifest.webmanifest",
 };
 
