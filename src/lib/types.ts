@@ -115,6 +115,14 @@ export type DirectOffer = {
 
 export type RivalSquadEntry = ApiPlayer & { clauseValue: number | null; memberId: string };
 
+export type RivalLineup = {
+  memberId: string;
+  formation: string;
+  captainPlayerId: string | null;
+  starters: string[];
+  submitted: boolean;
+};
+
 export type ActivityItem = {
   id: number;
   action: string;
@@ -149,6 +157,7 @@ export type LeagueState = {
   lineup: LineupState;
   market: MarketListing[];
   rivalSquads: RivalSquadEntry[];
+  rivalLineups: RivalLineup[];
   offersIn: DirectOffer[];
   offersOut: DirectOffer[];
   myListings: MarketListing[];

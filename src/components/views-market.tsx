@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { Activity, Check, CircleDollarSign, Gavel, Landmark, ListFilter, LockKeyhole, Search, Tag, X } from "lucide-react";
-import { countdown, money, moneyInput } from "@/lib/client";
+import { Crown, Shirt } from "lucide-react";
+import { countdown, money, moneyInput, nameAndSurname, pitchCoordinates } from "@/lib/client";
 import type { LeagueState, MarketListing, RivalSquadEntry, SquadEntry } from "@/lib/types";
 import type { Notify } from "@/components/fantasy-app";
 import { PlayerAvatar, PositionTag, Trend } from "@/components/ui";
@@ -26,6 +27,7 @@ export function MarketView({ state, act, notify }: { state: LeagueState; act: Ac
   const [offerTarget, setOfferTarget] = useState<RivalSquadEntry | null>(null);
   const [listTarget, setListTarget] = useState<SquadEntry | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [lineupRival, setLineupRival] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -180,7 +182,7 @@ export function MarketView({ state, act, notify }: { state: LeagueState; act: Ac
               <section className="panel" key={member.id}>
                 <div className="panel-head">
                   <div><span className="kicker">{member.displayName.toUpperCase()}</span><h2>{member.teamName}</h2></div>
-                  <span className="counter">{money(member.squadValue)}</span>
+                  <button className="ghost-button" onClick={() => setLineupRival(member.id)}><Shirt size={13} /> Alineación</button>
                 </div>
                 <div className="sell-list">
                   {squad.map((player) => (
@@ -282,6 +284,38 @@ export function MarketView({ state, act, notify }: { state: LeagueState; act: Ac
       )}
 
       {detailId && <PlayerModal leagueId={state.league.id} playerId={detailId} onClose={() => setDetailId(null)} />}
+
+      {lineupRival && (() => {
+        const member = state.members.find((m) => m.id === lineupRival);
+        const rl = state.rivalLineups.find((l) => l.memberId === lineupRival);
+        const squad = state.rivalSquads.filter((p) => p.memberId === lineupRival);
+        const byId = new Map(squad.map((p) => [p.id, p]));
+        const coords = rl ? pitchCoordinates(rl.formation) : [];
+        return (
+          <div className="modal-backdrop" onMouseDown={() => setLineupRival(null)}>
+            <div className="lineup-modal" onMouseDown={(event) => event.stopPropagation()}>
+              <button className="modal-close" onClick={() => setLineupRival(null)}><X /></button>
+              <div className="lineup-modal-head"><span className="kicker">{member?.displayName.toUpperCase()}</span><h2>{member?.teamName}</h2><p>{rl ? `${rl.formation} · ${Math.round(member?.totalPoints ?? 0)} pts` : "Sin alineación esta jornada"}</p></div>
+              {rl && rl.starters.length > 0 ? (
+                <div className="pitch full-pitch rival-pitch">
+                  {rl.starters.map((id, index) => {
+                    const player = byId.get(id);
+                    if (!player) return null;
+                    return (
+                      <div key={id} className="pitch-player" style={{ left: `${coords[index]?.left ?? 50}%`, top: `${coords[index]?.top ?? 50}%` }}>
+                        <PlayerAvatar player={player} />
+                        {state.league.settings.captain && id === rl.captainPlayerId && <Crown className="captain-crown" />}
+                        <strong>{nameAndSurname(player.name)}</strong>
+                        <span>{money(player.value)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : <div className="empty-state"><Shirt /><h3>Sin alineación</h3><p>Este mánager aún no ha puesto su once para la jornada actual.</p></div>}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

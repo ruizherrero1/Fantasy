@@ -866,6 +866,29 @@ export async function getLeagueState(db: Db, league: LeagueRow, member: MemberRo
     }
   }
 
+  // Alineaciones de los rivales (jornada actual).
+  const rivalLineups: LeagueState["rivalLineups"] = [];
+  if (matchday) {
+    const rivalIds = membersData.filter((m) => m.id !== member.id).map((m) => m.id);
+    if (rivalIds.length > 0) {
+      const { data: rlRows } = await db.from("fantasy_lineups").select("id, league_member_id, formation, captain_player_id, submitted_at").eq("matchday_id", matchday.id).in("league_member_id", rivalIds);
+      const rlIds = (rlRows ?? []).map((r) => r.id);
+      const { data: rlPlayers } = rlIds.length > 0
+        ? await db.from("fantasy_lineup_players").select("lineup_id, player_id, slot, is_starter").in("lineup_id", rlIds)
+        : { data: [] };
+      for (const row of rlRows ?? []) {
+        const ps = (rlPlayers ?? []).filter((p) => p.lineup_id === row.id).sort((a, b) => (a.slot as number) - (b.slot as number));
+        rivalLineups.push({
+          memberId: row.league_member_id as string,
+          formation: row.formation,
+          captainPlayerId: row.captain_player_id,
+          starters: ps.filter((p) => p.is_starter).map((p) => p.player_id as string),
+          submitted: row.submitted_at !== null,
+        });
+      }
+    }
+  }
+
   // Mercado abierto.
   const { data: listings } = await db
     .from("fantasy_market_listings")
@@ -991,6 +1014,7 @@ export async function getLeagueState(db: Db, league: LeagueRow, member: MemberRo
       clauseValue: row.clause_value === null ? null : Number(row.clause_value),
       memberId: row.league_member_id as string,
     })),
+    rivalLineups,
     offersIn: (offers ?? []).filter((o) => o.to_member_id === member.id).map(toOffer),
     offersOut: (offers ?? []).filter((o) => o.from_member_id === member.id).map(toOffer),
     myListings: marketListings.filter((l) => l.sellerMemberId === member.id),

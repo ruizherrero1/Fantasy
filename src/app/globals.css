@@ -273,3 +273,10 @@ a { color:inherit; text-decoration:none; }
 .player-modal-owner strong{color:var(--ink)}
 .player-modal-actions{display:flex;gap:10px;flex-wrap:wrap}
 .player-modal-actions .button{flex:1;min-width:140px}
+
+/* Modal de alineación de rival */
+.lineup-modal{position:relative;width:min(520px,95vw);max-height:92vh;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:22px}
+.lineup-modal-head{text-align:center;margin-bottom:14px}
+.lineup-modal-head h2{margin:4px 0 2px;font:700 18px var(--font-display)}
+.lineup-modal-head p{margin:0;font-size:12px;color:var(--muted)}
+.rival-pitch{height:440px;border-radius:12px}
