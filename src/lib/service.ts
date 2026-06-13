@@ -48,6 +48,7 @@ type PlayerRow = {
   position: Position;
   current_value: number;
   team_id: string | null;
+  photo_url: string | null;
   metadata: Record<string, unknown> | null;
   team?: { external_id: number; name: string; short_name: string | null; badge_url: string | null; colors: unknown } | null;
 };
@@ -164,13 +165,107 @@ export async function seedLaLiga(db: Db, season: number) {
 }
 
 // ---------------------------------------------------------------------------
+// Sincronización de datos reales (LaLiga Fantasy)
+// ---------------------------------------------------------------------------
+
+const TEAM_COLORS = ["#e30613", "#004d98", "#cb3524", "#ee2523", "#0b67b2", "#ffe667", "#0bb363", "#d8332e", "#f4a014", "#cd2534", "#d91a21", "#8ac3ee", "#e53241", "#e20613", "#0761af", "#2475c5", "#1352a1", "#1d3a8f", "#0a8943", "#2456a5"];
+
+function realValue(seasonPoints: number, games: number) {
+  // Valor según media por partido (rango realista) con una pizca por regularidad.
+  const avg = games > 0 ? seasonPoints / games : 0;
+  return roundMoney(Math.min(45_000_000, Math.max(500_000, 600_000 + avg * 4_200_000 + games * 45_000)));
+}
+
+export type RealPlayerInput = {
+  externalId: number;
+  name: string;
+  position: Position;
+  teamExternalId: number;
+  teamName: string;
+  teamBadge: string | null;
+  photo: string | null;
+  weekPoints: [number, number][];
+};
+
+export async function seedLaLigaReal(db: Db, season: number, players: RealPlayerInput[]) {
+  // 1) Equipos.
+  const teams = new Map<number, { name: string; badge: string | null }>();
+  for (const player of players) {
+    if (!teams.has(player.teamExternalId)) teams.set(player.teamExternalId, { name: player.teamName, badge: player.teamBadge });
+  }
+  const teamIdByExternal = new Map<number, string>();
+  let colorIndex = 0;
+  for (const [externalId, team] of teams) {
+    const row = unwrap(
+      await db.from("fantasy_teams").upsert({
+        external_id: externalId,
+        competition_external_id: 140,
+        season,
+        name: team.name,
+        short_name: team.name.slice(0, 3).toUpperCase(),
+        badge_url: team.badge,
+        colors: [TEAM_COLORS[colorIndex % TEAM_COLORS.length]],
+      }, { onConflict: "external_id,season" }).select("id").single(),
+      `No se pudo guardar el equipo ${team.name}`,
+    ) as { id: string };
+    teamIdByExternal.set(externalId, row.id);
+    colorIndex += 1;
+  }
+
+  // 2) Jugadores con valor derivado de su rendimiento real.
+  const playerRows = players.map((player) => {
+    const seasonPoints = player.weekPoints.reduce((sum, [, pts]) => sum + pts, 0);
+    const value = realValue(seasonPoints, player.weekPoints.length);
+    return {
+      external_id: player.externalId,
+      team_id: teamIdByExternal.get(player.teamExternalId) ?? null,
+      season,
+      name: player.name,
+      position: player.position,
+      photo_url: player.photo,
+      status: "available",
+      current_value: value,
+      metadata: { source: "laliga-fantasy", baseValue: value, seasonPoints },
+    };
+  });
+  for (let i = 0; i < playerRows.length; i += 200) {
+    const { error } = await db.from("fantasy_players").upsert(playerRows.slice(i, i + 200), { onConflict: "external_id,season" });
+    if (error) throw new ServiceError(`No se pudieron guardar jugadores: ${error.message}`, 500);
+  }
+
+  // 3) Mapa external_id → uuid para los puntos por jornada.
+  const idByExternal = new Map<number, string>();
+  const externalIds = players.map((p) => p.externalId);
+  for (let i = 0; i < externalIds.length; i += 300) {
+    const { data } = await db.from("fantasy_players").select("id, external_id").eq("season", season).in("external_id", externalIds.slice(i, i + 300));
+    for (const row of data ?? []) idByExternal.set(row.external_id as number, row.id as string);
+  }
+
+  // 4) Puntos reales por jornada.
+  const weekRows: { player_id: string; week: number; points: number; played: boolean }[] = [];
+  for (const player of players) {
+    const playerId = idByExternal.get(player.externalId);
+    if (!playerId) continue;
+    for (const [week, points] of player.weekPoints) {
+      weekRows.push({ player_id: playerId, week, points, played: true });
+    }
+  }
+  for (let i = 0; i < weekRows.length; i += 500) {
+    const { error } = await db.from("fantasy_player_week_points").upsert(weekRows.slice(i, i + 500), { onConflict: "player_id,week" });
+    if (error) throw new ServiceError(`No se pudieron guardar los puntos por jornada: ${error.message}`, 500);
+  }
+
+  return { teams: teams.size, players: playerRows.length, weekPoints: weekRows.length };
+}
+
+// ---------------------------------------------------------------------------
 // Plantillas aleatorias y alineaciones
 // ---------------------------------------------------------------------------
 
 async function fetchPlayers(db: Db, season: number): Promise<PlayerRow[]> {
   const { data, error } = await db
     .from("fantasy_players")
-    .select("id, name, position, current_value, team_id, metadata, team:fantasy_teams(external_id, name, short_name, badge_url, colors)")
+    .select("id, name, position, current_value, team_id, photo_url, metadata, team:fantasy_teams(external_id, name, short_name, badge_url, colors)")
     .eq("season", season)
     .gt("current_value", 0)
     .limit(2000);
@@ -588,13 +683,32 @@ export async function simulateMatchday(db: Db, league: LeagueRow, actorUserId: s
   const players = await fetchPlayers(db, league.season);
   const playersById = new Map(players.map((p) => [p.id, p]));
 
+  // Puntos reales de LaLiga para esta jornada (si se han sincronizado).
+  const { data: realRows } = await db
+    .from("fantasy_player_week_points")
+    .select("player_id, points, played")
+    .eq("week", matchday.number)
+    .limit(5000);
+  const realByPlayer = new Map<string, { points: number; played: boolean }>();
+  for (const row of realRows ?? []) realByPlayer.set(row.player_id as string, { points: Number(row.points), played: Boolean(row.played) });
+  const useReal = realByPlayer.size > 0;
+
   const teamIds = [...new Set(players.map((p) => p.team_id).filter(Boolean))] as string[];
   const cleanSheetTeams = new Set(teamIds.filter(() => Math.random() < 0.28));
 
   const statsByPlayer = new Map<string, { stats: PlayerMatchStats; points: number }>();
   for (const player of players) {
-    const stats = generateStats(player, cleanSheetTeams);
-    statsByPlayer.set(player.id, { stats, points: calculateFantasyPoints(stats, rules) });
+    if (useReal) {
+      const real = realByPlayer.get(player.id);
+      const played = real !== undefined;
+      const points = real?.points ?? 0;
+      // Minutos sintéticos: solo para que las sustituciones automáticas detecten quién no jugó.
+      const stats = { minutes: played ? 90 : 0, goals: 0, assists: 0, cleanSheet: false, saves: 0, penaltySaved: 0, yellowCards: 0, redCards: 0, ownGoals: 0, penaltyMissed: 0 } as PlayerMatchStats;
+      statsByPlayer.set(player.id, { stats, points });
+    } else {
+      const stats = generateStats(player, cleanSheetTeams);
+      statsByPlayer.set(player.id, { stats, points: calculateFantasyPoints(stats, rules) });
+    }
   }
 
   const scoreRows = [...statsByPlayer.entries()].map(([playerId, { stats, points }]) => ({
@@ -758,6 +872,7 @@ function toApiPlayer(player: PlayerRow, stats: Map<string, { season: number; las
     teamShort: player.team?.short_name ?? "?",
     teamColor: teamColors[0] ?? "#3b6c4f",
     teamLogo: player.team?.badge_url ?? (player.team?.external_id ? `https://media.api-sports.io/football/teams/${player.team.external_id}.png` : null),
+    photo: player.photo_url ?? null,
     value: Number(player.current_value),
     seasonPoints: playerStats?.season ?? 0,
     lastPoints: playerStats?.last ?? null,
@@ -778,7 +893,7 @@ export async function getLeagueState(db: Db, league: LeagueRow, member: MemberRo
   }
   const player = (id: string): ApiPlayer => {
     const row = playersById.get(id);
-    return row ? toApiPlayer(row, stats) : { id, name: "Jugador", position: "MED", team: "—", teamShort: "?", teamColor: "#3b6c4f", teamLogo: null, value: 0, seasonPoints: 0, lastPoints: null };
+    return row ? toApiPlayer(row, stats) : { id, name: "Jugador", position: "MED", team: "—", teamShort: "?", teamColor: "#3b6c4f", teamLogo: null, photo: null, value: 0, seasonPoints: 0, lastPoints: null };
   };
 
   const { data: memberRows } = await db

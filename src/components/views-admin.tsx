@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Check, Copy, LockKeyhole, Minus, Play, Plus, RotateCcw, Shield, Users } from "lucide-react";
+import { AlertTriangle, Check, Copy, FastForward, LockKeyhole, Minus, Play, Plus, RotateCcw, Shield, Users } from "lucide-react";
 import { timeAgo } from "@/lib/client";
 import type { LeagueSettings, LeagueState } from "@/lib/types";
 import type { Notify } from "@/components/fantasy-app";
@@ -11,6 +11,7 @@ type Act = (url: string, body?: unknown, method?: "POST" | "PUT") => Promise<boo
 
 export function AdminView({ state, act, notify }: { state: LeagueState; act: Act; notify: Notify }) {
   const [busy, setBusy] = useState(false);
+  const [simCount, setSimCount] = useState(3);
 
   function copyInvite() {
     void navigator.clipboard?.writeText(state.league.inviteCode);
@@ -25,6 +26,14 @@ export function AdminView({ state, act, notify }: { state: LeagueState; act: Act
     if (ok) notify("Jornada disputada.");
   }
 
+  async function simulateMany() {
+    if (!window.confirm(`¿Disputar ${simCount} jornada${simCount === 1 ? "" : "s"} seguidas con puntos reales?`)) return;
+    setBusy(true);
+    const ok = await act(`/api/league/${state.league.id}/simulate-many`, { count: simCount });
+    setBusy(false);
+    if (ok) notify(`Se disputaron hasta ${simCount} jornadas.`);
+  }
+
   return (
     <div className="admin-grid">
       <section className="panel admin-summary">
@@ -32,6 +41,26 @@ export function AdminView({ state, act, notify }: { state: LeagueState; act: Act
         <button className="invite-chip" onClick={copyInvite}><LockKeyhole /><span><strong>{state.league.inviteCode}</strong><small>código de invitación · copiar</small></span><Copy size={14} /></button>
         <div><Shield /><span><strong>J{state.league.currentMatchday}</strong><small>jornada actual</small></span></div>
       </section>
+
+      {state.league.isAdmin && (
+        <section className="panel sim-panel">
+          <div className="panel-head"><div><span className="kicker">PRUEBAS · DEMO</span><h2>Simular jornadas</h2></div></div>
+          <div className="sim-body">
+            <p>Disputa la jornada actual o varias seguidas con los <strong>puntos reales</strong> de LaLiga, para avanzar la liga y hacer pruebas.</p>
+            <div className="sim-controls">
+              <button className="button button-small" disabled={busy} onClick={simulate}><Play size={14} /> Jornada {state.league.currentMatchday}</button>
+              <div className="sim-many">
+                <div className="stepper">
+                  <button disabled={busy} onClick={() => setSimCount(Math.max(1, simCount - 1))}><Minus /></button>
+                  <strong>{simCount}</strong>
+                  <button disabled={busy} onClick={() => setSimCount(Math.min(38, simCount + 1))}><Plus /></button>
+                </div>
+                <button className="button button-small" disabled={busy} onClick={simulateMany}><FastForward size={14} /> Simular {simCount} jornadas</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="panel members-panel">
         <div className="panel-head">

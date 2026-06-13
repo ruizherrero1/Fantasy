@@ -66,6 +66,7 @@ export type ApiPlayer = {
   teamShort: string;
   teamColor: string;
   teamLogo: string | null;
+  photo: string | null;
   value: number;
   seasonPoints: number;
   lastPoints: number | null;

@@ -5,20 +5,33 @@ import { TrendingDown, TrendingUp } from "lucide-react";
 import { initials } from "@/lib/client";
 import type { ApiPlayer } from "@/lib/types";
 
-export function PlayerAvatar({ player, small = false }: { player: Pick<ApiPlayer, "name" | "team" | "teamColor" | "teamLogo">; small?: boolean }) {
+export function PlayerAvatar({ player, small = false }: { player: Pick<ApiPlayer, "name" | "team" | "teamColor" | "teamLogo"> & { photo?: string | null }; small?: boolean }) {
   return (
     <span
-      className={`player-avatar ${small ? "small" : ""}`}
+      className={`player-avatar ${small ? "small" : ""} ${player.photo ? "has-photo" : ""}`}
       style={{ background: player.teamColor, color: contrast(player.teamColor) }}
       title={player.team}
     >
-      {initials(player.name)}
+      {player.photo ? (
+        <Image
+          className="avatar-photo"
+          src={player.photo}
+          alt={player.name}
+          width={small ? 34 : 45}
+          height={small ? 34 : 45}
+          unoptimized
+          onError={(event) => { event.currentTarget.style.display = "none"; }}
+        />
+      ) : (
+        initials(player.name)
+      )}
       {player.teamLogo ? (
         <Image
+          className="avatar-badge"
           src={player.teamLogo}
           alt={`Escudo de ${player.team}`}
-          width={small ? 28 : 38}
-          height={small ? 28 : 38}
+          width={small ? 16 : 20}
+          height={small ? 16 : 20}
           unoptimized
           onError={(event) => { event.currentTarget.style.display = "none"; }}
         />

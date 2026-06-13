@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "media.api-sports.io", pathname: "/football/teams/**" },
+      { protocol: "https", hostname: "assets-fantasy.llt-services.com", pathname: "/**" },
     ],
   },
 };
