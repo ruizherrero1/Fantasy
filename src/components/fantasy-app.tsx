@@ -6,7 +6,7 @@ import {
   MessageCircle, Search, Settings, Shield, Shirt, Trophy, X,
 } from "lucide-react";
 import { Brand } from "@/components/brand";
-import { apiGet, apiPost, money } from "@/lib/client";
+import { apiGet, apiPost, money, timeAgo } from "@/lib/client";
 import type { LeagueState, Membership } from "@/lib/types";
 import { HomeView } from "@/components/views-home";
 import { SquadView } from "@/components/views-squad";
@@ -40,6 +40,7 @@ export function FantasyApp() {
   const [theme, setTheme] = useState<Theme>("stratos");
   const [toast, setToast] = useState<{ text: string; kind: "ok" | "error" } | null>(null);
   const [leagueMenu, setLeagueMenu] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
 
   const notify: Notify = useCallback((text, kind = "ok") => {
     setToast({ text, kind });
@@ -102,6 +103,15 @@ export function FantasyApp() {
   async function logout() {
     await apiPost("/api/auth/logout");
     window.location.href = "/login";
+  }
+
+  async function toggleNotifications() {
+    const opening = !notifOpen;
+    setNotifOpen(opening);
+    if (opening && state && state.unreadCount > 0) {
+      await apiPost(`/api/league/${state.league.id}/notifications`);
+      await refresh();
+    }
   }
 
   function goTo(next: Section) {
@@ -183,7 +193,27 @@ export function FantasyApp() {
           <div><h1>{title}</h1><p>{subtitle}</p></div>
           <div className="topbar-actions">
             <button className="icon-button" onClick={() => goTo("mercado")}><Search /></button>
-            <button className={`icon-button ${state.offersIn.length > 0 ? "notification" : ""}`} onClick={() => goTo("mercado")}><Bell />{state.offersIn.length > 0 && <i />}</button>
+            <div className="notif-wrap">
+              <button className={`icon-button ${state.unreadCount > 0 ? "notification" : ""}`} onClick={toggleNotifications}><Bell />{state.unreadCount > 0 && <i />}</button>
+              {notifOpen && (
+                <>
+                  <button className="notif-backdrop" aria-label="Cerrar" onClick={() => setNotifOpen(false)} />
+                  <div className="notif-panel">
+                    <header><strong>Notificaciones</strong>{state.notifications.length > 0 && <span>{state.notifications.length}</span>}</header>
+                    <div className="notif-list">
+                      {state.notifications.length === 0 && <div className="empty-mini">Sin notificaciones todavía.</div>}
+                      {state.notifications.map((item) => (
+                        <div key={item.id} className={item.read ? "" : "unread"}>
+                          <strong>{item.title}</strong>
+                          {item.body && <small>{item.body}</small>}
+                          <time>{timeAgo(item.createdAt)}</time>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
             <div className="balance"><small>SALDO</small><strong>{money(state.myMember.budget)}</strong></div>
           </div>
         </header>

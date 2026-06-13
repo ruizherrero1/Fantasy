@@ -1,7 +1,7 @@
 "use client";
 
 import { Activity, Check, Crown, Gavel, Shield, Trophy, TrendingUp, Users } from "lucide-react";
-import { money, pitchCoordinates, timeAgo } from "@/lib/client";
+import { money, nameAndSurname, pitchCoordinates, timeAgo } from "@/lib/client";
 import type { LeagueState } from "@/lib/types";
 import type { Section } from "@/components/fantasy-app";
 import { PlayerAvatar, Trend } from "@/components/ui";
@@ -37,7 +37,7 @@ export function HomeView({ state, onNavigate }: { state: LeagueState; onNavigate
             <button key={player.id} className="pitch-player" style={{ left: `${coordinates[index]?.left ?? 50}%`, top: `${coordinates[index]?.top ?? 50}%` }} onClick={() => onNavigate("plantilla")}>
               <PlayerAvatar player={player} small />
               {state.league.settings.captain && player.id === state.lineup.captainPlayerId && <Crown className="captain-crown" />}
-              <strong>{player.name.split(" ").at(-1)}</strong>
+              <strong>{nameAndSurname(player.name)}</strong>
               <span>{player.lastPoints ?? "—"}</span>
             </button>
           ))}

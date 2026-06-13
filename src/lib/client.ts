@@ -64,6 +64,13 @@ export function initials(name: string) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+// Nombre y apellido para las etiquetas: "José María Giménez" -> "José Giménez".
+export function nameAndSurname(name: string) {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0];
+  return `${parts[0]} ${parts[parts.length - 1]}`;
+}
+
 export function pitchCoordinates(formation: string): { left: number; top: number }[] {
   const shape = formation.split("-").map(Number);
   const [def, med, del] = shape.length === 3 ? shape : [4, 4, 2];

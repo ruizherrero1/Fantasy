@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Check, Crown, Sparkles, X } from "lucide-react";
-import { money, pitchCoordinates, positionOrder } from "@/lib/client";
+import { money, nameAndSurname, pitchCoordinates, positionOrder } from "@/lib/client";
 import { formations, type LeagueState, type SquadEntry } from "@/lib/types";
 import type { Notify } from "@/components/fantasy-app";
 import { PlayerAvatar, PositionTag } from "@/components/ui";
+import { PlayerModal } from "@/components/player-modal";
 
 type Act = (url: string, body?: unknown, method?: "POST" | "PUT") => Promise<boolean>;
 
@@ -32,6 +33,7 @@ export function SquadView({ state, act, notify }: { state: LeagueState; act: Act
   const [captain, setCaptain] = useState<string | null>(state.lineup.captainPlayerId);
   const [dirty, setDirty] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -112,7 +114,7 @@ export function SquadView({ state, act, notify }: { state: LeagueState; act: Act
               <button key={id} className="pitch-player" style={{ left: `${coordinates[index]?.left ?? 50}%`, top: `${coordinates[index]?.top ?? 50}%` }} onClick={() => setSelected(id)}>
                 <PlayerAvatar player={player} />
                 {settings.captain && id === captain && <Crown className="captain-crown" />}
-                <strong>{player.name.split(" ").at(-1)}</strong>
+                <strong>{nameAndSurname(player.name)}</strong>
                 <span>{money(player.value)}</span>
               </button>
             );
@@ -129,7 +131,7 @@ export function SquadView({ state, act, notify }: { state: LeagueState; act: Act
                 return (
                   <div key={id} className="bench-chip">
                     <PlayerAvatar player={player} small />
-                    <span><strong>{player.name.split(" ").at(-1)}</strong><small>{player.position}</small></span>
+                    <span><strong>{nameAndSurname(player.name)}</strong><small>{player.position}</small></span>
                     <div className="bench-actions">
                       <button onClick={() => moveBench(id, -1)} disabled={index === 0} aria-label="Subir"><ArrowUp /></button>
                       <button onClick={() => moveBench(id, 1)} disabled={index === bench.length - 1} aria-label="Bajar"><ArrowDown /></button>
@@ -149,14 +151,14 @@ export function SquadView({ state, act, notify }: { state: LeagueState; act: Act
           const isStarter = starters.includes(player.id);
           const isBench = bench.includes(player.id);
           return (
-            <div className={`squad-row ${!isStarter && !isBench ? "bench" : ""}`} key={player.id}>
+            <button className={`squad-row clickable ${!isStarter && !isBench ? "bench" : ""}`} key={player.id} onClick={() => setDetailId(player.id)}>
               <PlayerAvatar player={player} small />
               <span>
                 <strong>{player.name}{settings.captain && player.id === captain && <Crown />}</strong>
                 <small>{player.position} · {player.team} · {isStarter ? "Titular" : isBench ? "Suplente" : "Sin convocar"}</small>
               </span>
               <div><b>{Math.round(player.seasonPoints)}</b><small>pts</small></div>
-            </div>
+            </button>
           );
         })}
         <div className="bench-label">Valor total: {money(state.squad.reduce((sum, p) => sum + p.value, 0))} · Saldo: {money(state.myMember.budget)}</div>
@@ -186,6 +188,24 @@ export function SquadView({ state, act, notify }: { state: LeagueState; act: Act
             </div>
           </div>
         </div>
+      )}
+
+      {detailId && (
+        <PlayerModal
+          leagueId={state.league.id}
+          playerId={detailId}
+          actions={state.squad.length > 11 ? [{
+            label: "Vender al mercado",
+            tone: "ghost",
+            onClick: async () => {
+              const player = playersById.get(detailId);
+              if (player && window.confirm(`¿Vender a ${player.name} al mercado por ${money(player.value)}?`)) {
+                if (await act(`/api/league/${state.league.id}/market`, { action: "sellToMarket", playerId: detailId })) { notify("Jugador vendido al mercado."); setDetailId(null); }
+              }
+            },
+          }] : []}
+          onClose={() => setDetailId(null)}
+        />
       )}
     </div>
   );

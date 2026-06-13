@@ -162,6 +162,17 @@ export type LeagueState = {
     }>;
   } | null;
   activity: ActivityItem[];
+  notifications: NotificationItem[];
+  unreadCount: number;
+};
+
+export type NotificationItem = {
+  id: string;
+  kind: string;
+  title: string;
+  body: string | null;
+  read: boolean;
+  createdAt: string;
 };
 
 export type Membership = {

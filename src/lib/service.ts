@@ -97,6 +97,11 @@ export async function audit(db: Db, leagueId: string | null, actorUserId: string
   });
 }
 
+export async function notify(db: Db, userId: string | null, leagueId: string | null, kind: string, title: string, body?: string) {
+  if (!userId) return;
+  await db.from("fantasy_notifications").insert({ user_id: userId, league_id: leagueId, kind, title, body: body ?? null });
+}
+
 export function leagueSettings(league: LeagueRow): LeagueSettings {
   return parseLeagueSettings(league.settings);
 }
@@ -435,15 +440,6 @@ async function memberById(db: Db, memberId: string): Promise<MemberRow> {
   ) as MemberRow;
 }
 
-async function removeFromCurrentLineup(db: Db, league: LeagueRow, memberId: string, playerId: string) {
-  const matchday = await activeMatchday(db, league);
-  if (!matchday) return;
-  const { data: lineup } = await db.from("fantasy_lineups").select("id").eq("matchday_id", matchday.id).eq("league_member_id", memberId).maybeSingle();
-  if (!lineup) return;
-  await db.from("fantasy_lineup_players").delete().eq("lineup_id", lineup.id).eq("player_id", playerId);
-  await db.from("fantasy_lineups").update({ captain_player_id: null }).eq("id", lineup.id).eq("captain_player_id", playerId);
-}
-
 async function addToCurrentBench(db: Db, league: LeagueRow, memberId: string, playerId: string) {
   const matchday = await activeMatchday(db, league);
   if (!matchday) return;
@@ -463,55 +459,31 @@ async function addToCurrentBench(db: Db, league: LeagueRow, memberId: string, pl
   });
 }
 
+function cleanPgError(message: string): string {
+  // PostgREST antepone contexto; nos quedamos con el mensaje de la excepción.
+  const cleaned = message.replace(/^.*?:\s*/, "").trim();
+  return cleaned.length > 0 && cleaned.length < 160 ? cleaned : "No se pudo completar la operación.";
+}
+
 export async function executeTransfer(db: Db, args: TransferArgs) {
   const settings = leagueSettings(args.league);
   const amount = Math.round(args.amount);
 
-  let buyer: MemberRow | null = null;
-  if (args.toMemberId) {
-    buyer = await memberById(db, args.toMemberId);
-    if (Number(buyer.budget) < amount) fail("Saldo insuficiente para completar la operación.");
-    const { count } = await db.from("fantasy_squads").select("id", { count: "exact", head: true }).eq("league_member_id", buyer.id);
-    if ((count ?? 0) >= args.league.squad_size + 5) fail("Tu plantilla está completa.");
-    const { data: alreadyOwned } = await db.from("fantasy_squads").select("id").eq("league_member_id", buyer.id).eq("player_id", args.playerId).maybeSingle();
-    if (alreadyOwned) fail("Ese jugador ya está en tu plantilla.");
-  }
-
-  if (args.fromMemberId) {
-    const seller = await memberById(db, args.fromMemberId);
-    const { count } = await db.from("fantasy_squads").select("id", { count: "exact", head: true }).eq("league_member_id", seller.id);
-    if ((count ?? 0) <= 11) fail("El vendedor no puede quedarse con menos de 11 jugadores.");
-    const { data: squadRow } = await db.from("fantasy_squads").select("id").eq("league_member_id", args.fromMemberId).eq("player_id", args.playerId).maybeSingle();
-    if (!squadRow) fail("El vendedor ya no tiene ese jugador.");
-    await db.from("fantasy_squads").delete().eq("id", squadRow.id);
-    await removeFromCurrentLineup(db, args.league, args.fromMemberId, args.playerId);
-    await db.from("fantasy_league_members").update({ budget: Number(seller.budget) + amount }).eq("id", seller.id);
-    // Cancela ofertas y ventas pendientes que dependían de esa propiedad.
-    await db.from("fantasy_direct_offers").update({ status: "cancelled", resolved_at: new Date().toISOString() }).eq("league_id", args.league.id).eq("player_id", args.playerId).eq("status", "pending");
-    await db.from("fantasy_market_listings").update({ status: "cancelled", resolved_at: new Date().toISOString() }).eq("league_id", args.league.id).eq("player_id", args.playerId).eq("status", "open").not("seller_member_id", "is", null);
-  }
-
-  if (buyer) {
-    const { error } = await db.from("fantasy_squads").insert({
-      league_member_id: buyer.id,
-      player_id: args.playerId,
-      purchase_price: amount,
-      clause_value: roundMoney(amount * settings.clauseMultiplier),
-    });
-    if (error) throw new ServiceError(`No se pudo completar el fichaje: ${error.message}`, 500);
-    await db.from("fantasy_league_members").update({ budget: Number(buyer.budget) - amount }).eq("id", buyer.id);
-    await addToCurrentBench(db, args.league, buyer.id, args.playerId);
-  }
-
-  await db.from("fantasy_transfers").insert({
-    league_id: args.league.id,
-    player_id: args.playerId,
-    from_member_id: args.fromMemberId,
-    to_member_id: args.toMemberId,
-    listing_id: args.listingId ?? null,
-    kind: args.kind,
-    amount,
+  const { error } = await db.rpc("fantasy_execute_transfer", {
+    p_league_id: args.league.id,
+    p_player_id: args.playerId,
+    p_from_member: args.fromMemberId,
+    p_to_member: args.toMemberId,
+    p_amount: amount,
+    p_kind: args.kind,
+    p_listing_id: args.listingId ?? null,
+    p_clause_multiplier: settings.clauseMultiplier,
+    p_squad_size: args.league.squad_size,
   });
+  if (error) throw new ServiceError(cleanPgError(error.message), 400);
+
+  // Ajustes no críticos fuera de la transacción de dinero.
+  if (args.toMemberId) await addToCurrentBench(db, args.league, args.toMemberId, args.playerId);
   await audit(db, args.league.id, args.actorUserId, `transfer_${args.kind}`, args.detail);
 }
 
@@ -534,29 +506,39 @@ export async function resolveDueListings(db: Db, league: LeagueRow) {
     const { data: playerRow } = await db.from("fantasy_players").select("name").eq("id", listing.player_id).maybeSingle();
     const playerName = playerRow?.name ?? "Jugador";
 
-    let resolved = false;
-    for (const bid of bids ?? []) {
-      if (Number(bid.amount) < Number(listing.asking_price)) continue;
+    let winner: MemberRow | null = null;
+    const orderedBids = (bids ?? []).filter((bid) => Number(bid.amount) >= Number(listing.asking_price));
+    for (const bid of orderedBids) {
       const bidder = await memberById(db, bid.bidder_member_id);
-      if (Number(bidder.budget) < Number(bid.amount)) continue;
-      const { data: stillOwned } = await db.from("fantasy_squads").select("id").eq("player_id", listing.player_id).limit(1);
-      if ((stillOwned ?? []).length > 0) break;
-      await executeTransfer(db, {
-        league,
-        playerId: listing.player_id,
-        fromMemberId: null,
-        toMemberId: bidder.id,
-        amount: Number(bid.amount),
-        kind: "bid",
-        listingId: listing.id,
-        actorUserId: bidder.user_id,
-        detail: `${bidder.team_name} ganó la puja por ${playerName} (${(Number(bid.amount) / 1e6).toFixed(1)} M€)`,
-      });
-      await db.from("fantasy_market_listings").update({ status: "accepted", resolved_at: now }).eq("id", listing.id);
-      resolved = true;
-      break;
+      try {
+        // La RPC valida saldo/propiedad y marca la subasta como aceptada de forma atómica.
+        await executeTransfer(db, {
+          league,
+          playerId: listing.player_id,
+          fromMemberId: null,
+          toMemberId: bidder.id,
+          amount: Number(bid.amount),
+          kind: "bid",
+          listingId: listing.id,
+          actorUserId: bidder.user_id,
+          detail: `${bidder.team_name} ganó la puja por ${playerName} (${(Number(bid.amount) / 1e6).toFixed(1)} M€)`,
+        });
+        winner = bidder;
+        break;
+      } catch {
+        // Saldo insuficiente, ya fichado o subasta tomada por otra resolución: probamos la siguiente puja.
+        continue;
+      }
     }
-    if (!resolved) {
+
+    if (winner) {
+      await notify(db, winner.user_id, league.id, "bid_won", "Puja ganada", `Has fichado a ${playerName} por ${(Number(orderedBids.find((b) => b.bidder_member_id === winner!.id)?.amount ?? 0) / 1e6).toFixed(1)} M€.`);
+      for (const bid of orderedBids) {
+        if (bid.bidder_member_id === winner.id) continue;
+        const loser = await memberById(db, bid.bidder_member_id);
+        await notify(db, loser.user_id, league.id, "bid_lost", "Puja no ganada", `${winner.team_name} se llevó a ${playerName}.`);
+      }
+    } else {
       await db.from("fantasy_market_listings").update({ status: "expired", resolved_at: now }).eq("id", listing.id);
     }
   }
@@ -684,6 +666,12 @@ export async function simulateMatchday(db: Db, league: LeagueRow, actorUserId: s
   });
   for (const row of valueRows) {
     await db.from("fantasy_players").update({ current_value: row.current_value, metadata: row.metadata }).eq("id", row.id);
+  }
+  // Histórico de precios para las gráficas (un snapshot por jornada).
+  const recordedAt = new Date().toISOString();
+  const snapshots = valueRows.map((row) => ({ player_id: row.id, value: row.current_value, recorded_at: recordedAt }));
+  for (let i = 0; i < snapshots.length; i += 200) {
+    await db.from("fantasy_player_values").insert(snapshots.slice(i, i + 200));
   }
 
   await db.from("fantasy_matchdays").update({ status: "finished", ends_at: new Date().toISOString() }).eq("id", matchday.id);
@@ -940,6 +928,24 @@ export async function getLeagueState(db: Db, league: LeagueRow, member: MemberRo
     createdAt: row.created_at,
   }));
 
+  // Notificaciones del usuario en esta liga.
+  const { data: notifRows } = await db
+    .from("fantasy_notifications")
+    .select("id, kind, title, body, read_at, created_at")
+    .eq("user_id", user.id)
+    .eq("league_id", league.id)
+    .order("created_at", { ascending: false })
+    .limit(30);
+  const notifications = ((notifRows ?? []) as { id: string; kind: string; title: string; body: string | null; read_at: string | null; created_at: string }[]).map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    title: row.title,
+    body: row.body,
+    read: row.read_at !== null,
+    createdAt: row.created_at,
+  }));
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
   const mySquad = squads.filter((row) => row.league_member_id === member.id);
   const rivalSquads = squads.filter((row) => row.league_member_id !== member.id);
 
@@ -990,5 +996,7 @@ export async function getLeagueState(db: Db, league: LeagueRow, member: MemberRo
     myListings: marketListings.filter((l) => l.sellerMemberId === member.id),
     lastMatchday,
     activity,
+    notifications,
+    unreadCount,
   };
 }

@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { withMember, type MemberContext } from "@/lib/api-helpers";
-import { executeTransfer, leagueSettings, refreshMarket, ServiceError } from "@/lib/service";
+import { executeTransfer, leagueSettings, notify, refreshMarket, ServiceError } from "@/lib/service";
+
+async function memberUserId(context: MemberContext, memberId: string): Promise<string | null> {
+  const { data } = await context.db.from("fantasy_league_members").select("user_id").eq("id", memberId).maybeSingle();
+  return (data?.user_id as string) ?? null;
+}
 
 type Payload = {
   action?: string;
@@ -183,6 +188,7 @@ async function payClause(context: MemberContext, body: Payload) {
     actorUserId: context.user.id,
     detail: `${context.member.team_name} pagó la cláusula de ${name} (${money(amount)}) a ${seller?.team_name ?? "un rival"}`,
   });
+  await notify(context.db, await memberUserId(context, squadRow.league_member_id as string), context.league.id, "clause_paid", "Te han pagado una cláusula", `${context.member.team_name} fichó a ${name} por su cláusula (${money(amount)}).`);
   return NextResponse.json({ ok: true });
 }
 
@@ -218,6 +224,8 @@ async function makeOffer(context: MemberContext, body: Payload) {
     amount,
   });
   if (error) throw new ServiceError(`No se pudo enviar la oferta: ${error.message}`, 500);
+  const offeredName = await playerName(context, body.playerId);
+  await notify(context.db, await memberUserId(context, squadRow.league_member_id as string), context.league.id, "offer_received", "Nueva oferta recibida", `${context.member.team_name} ofrece ${money(amount)} por ${offeredName}.`);
   return NextResponse.json({ ok: true });
 }
 
@@ -231,11 +239,13 @@ async function respondOffer(context: MemberContext, body: Payload) {
     .maybeSingle();
   if (!offer || offer.status !== "pending") throw new ServiceError("Esa oferta ya no está disponible.");
   if (offer.to_member_id !== context.member.id) throw new ServiceError("Esa oferta no es para ti.");
+  const offerPlayerName = await playerName(context, offer.player_id as string);
   if (!body.accept) {
     await context.db.from("fantasy_direct_offers").update({ status: "rejected", resolved_at: new Date().toISOString() }).eq("id", offer.id);
+    await notify(context.db, await memberUserId(context, offer.from_member_id as string), context.league.id, "offer_rejected", "Oferta rechazada", `${context.member.team_name} rechazó tu oferta por ${offerPlayerName}.`);
     return NextResponse.json({ ok: true });
   }
-  const name = await playerName(context, offer.player_id as string);
+  const name = offerPlayerName;
   const { data: buyer } = await context.db.from("fantasy_league_members").select("team_name").eq("id", offer.from_member_id).maybeSingle();
   await executeTransfer(context.db, {
     league: context.league,
@@ -248,6 +258,7 @@ async function respondOffer(context: MemberContext, body: Payload) {
     detail: `${context.member.team_name} traspasó a ${name} a ${buyer?.team_name ?? "un rival"} por ${money(Number(offer.amount))}`,
   });
   await context.db.from("fantasy_direct_offers").update({ status: "accepted", resolved_at: new Date().toISOString() }).eq("id", offer.id);
+  await notify(context.db, await memberUserId(context, offer.from_member_id as string), context.league.id, "offer_accepted", "Oferta aceptada", `${context.member.team_name} aceptó tu oferta: ${name} es tuyo por ${money(Number(offer.amount))}.`);
   return NextResponse.json({ ok: true });
 }
 

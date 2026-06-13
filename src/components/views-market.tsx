@@ -6,6 +6,14 @@ import { countdown, money, moneyInput } from "@/lib/client";
 import type { LeagueState, MarketListing, RivalSquadEntry, SquadEntry } from "@/lib/types";
 import type { Notify } from "@/components/fantasy-app";
 import { PlayerAvatar, PositionTag, Trend } from "@/components/ui";
+import { PlayerModal } from "@/components/player-modal";
+
+const tabHelp: Record<string, string> = {
+  subastas: "Subastas diarias de la liga. Tu puja es secreta: gana la más alta al cierre.",
+  ventas: "Vende tus jugadores al mercado al instante o ponlos a precio fijo para tus rivales.",
+  rivales: "Mira las plantillas rivales. Paga su cláusula o envía una oferta directa.",
+  operaciones: "Tus pujas, ofertas enviadas y ofertas recibidas pendientes de respuesta.",
+};
 
 type Act = (url: string, body?: unknown, method?: "POST" | "PUT") => Promise<boolean>;
 type Tab = "subastas" | "ventas" | "rivales" | "operaciones";
@@ -17,6 +25,7 @@ export function MarketView({ state, act, notify }: { state: LeagueState; act: Ac
   const [bidTarget, setBidTarget] = useState<MarketListing | null>(null);
   const [offerTarget, setOfferTarget] = useState<RivalSquadEntry | null>(null);
   const [listTarget, setListTarget] = useState<SquadEntry | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -79,6 +88,8 @@ export function MarketView({ state, act, notify }: { state: LeagueState; act: Ac
         ))}
       </div>
 
+      <p className="tab-help">{tabHelp[tab]}</p>
+
       <div className="market-summary">
         <div><Gavel /><span><small>TUS PUJAS ACTIVAS</small><strong>{myBids.length}</strong></span></div>
         <div><Landmark /><span><small>SALDO DISPONIBLE</small><strong>{money(state.myMember.budget)}</strong></span></div>
@@ -93,25 +104,28 @@ export function MarketView({ state, act, notify }: { state: LeagueState; act: Ac
           </div>
           <section className="market-grid">
             {filteredMarket.map((listing) => (
-              <article className="market-card" key={listing.id}>
-                <div className="market-card-top"><PlayerAvatar player={listing.player} /><PositionTag position={listing.player.position} /><Trend player={listing.player} /></div>
-                <h3>{listing.player.name}</h3>
-                <p>{listing.player.team}</p>
+              <article className={`market-card ${listing.myBid !== null ? "bidding" : ""}`} key={listing.id}>
+                {listing.kind === "bid" && <span className="card-countdown" title="Cierre de la subasta">{countdown(listing.closesAt)}</span>}
+                <button className="market-card-id" onClick={() => setDetailId(listing.player.id)}>
+                  <div className="market-card-top"><PlayerAvatar player={listing.player} /><PositionTag position={listing.player.position} /><Trend player={listing.player} /></div>
+                  <h3>{listing.player.name}</h3>
+                  <p>{listing.player.team}</p>
+                </button>
                 <div className="player-stats">
-                  <span><small>PRECIO</small><strong>{money(listing.askingPrice)}</strong></span>
+                  <span><small>{listing.kind === "bid" ? "PUJA MÍN." : "PRECIO"}</small><strong>{money(listing.askingPrice)}</strong></span>
                   <span><small>PUNTOS</small><strong>{Math.round(listing.player.seasonPoints)}</strong></span>
-                  <span><small>{listing.kind === "bid" ? "CIERRE" : "VENDE"}</small><strong>{listing.kind === "bid" ? countdown(listing.closesAt) : (listing.sellerName ?? "Liga")}</strong></span>
+                  <span><small>{listing.kind === "bid" ? "PUJAS" : "VENDE"}</small><strong>{listing.kind === "bid" ? listing.bidCount : (listing.sellerName ?? "Liga")}</strong></span>
                 </div>
                 {listing.kind === "bid" ? (
                   listing.myBid !== null
-                    ? <button className="bid-done" onClick={() => { setBidTarget(listing); setAmount(String(listing.myBid! / 1e6)); }}><Check /> Tu puja: {money(listing.myBid)}</button>
+                    ? <button className="bid-done" onClick={() => { setBidTarget(listing); setAmount(String(listing.myBid! / 1e6)); }}><Check /> Tu puja: {money(listing.myBid)} · cambiar</button>
                     : <button className="button full" disabled={!state.league.settings.market.bids} onClick={() => { setBidTarget(listing); setAmount(""); }}>Pujar <Gavel size={16} /></button>
                 ) : (
                   <button className="button full" disabled={busy || !state.league.settings.market.fixedPrice} onClick={async () => {
                     if (window.confirm(`¿Comprar a ${listing.player.name} por ${money(listing.askingPrice)}?`)) await run({ action: "buyFixed", listingId: listing.id }, "¡Fichaje completado!");
                   }}>Comprar ya <Tag size={15} /></button>
                 )}
-                <small className="market-owner">{listing.kind === "bid" ? `${listing.bidCount} puja${listing.bidCount === 1 ? "" : "s"} · Subasta de la liga` : `Venta directa de ${listing.sellerName ?? "la liga"}`}</small>
+                <small className="market-owner">{listing.kind === "bid" ? "Puja secreta · gana la más alta al cierre" : `Venta directa de ${listing.sellerName ?? "la liga"}`}</small>
               </article>
             ))}
           </section>
@@ -171,8 +185,10 @@ export function MarketView({ state, act, notify }: { state: LeagueState; act: Ac
                 <div className="sell-list">
                   {squad.map((player) => (
                     <div className="sell-row" key={player.id}>
-                      <PlayerAvatar player={player} small />
-                      <span><strong>{player.name}</strong><small>{player.position} · {player.team}</small></span>
+                      <button className="sell-row-id" onClick={() => setDetailId(player.id)}>
+                        <PlayerAvatar player={player} small />
+                        <span><strong>{player.name}</strong><small>{player.position} · {player.team}</small></span>
+                      </button>
                       <em>{money(player.value)}</em>
                       <div className="row-actions">
                         {state.league.settings.market.clauses && player.clauseValue !== null && (
@@ -264,6 +280,8 @@ export function MarketView({ state, act, notify }: { state: LeagueState; act: Ac
           </div>
         </div>
       )}
+
+      {detailId && <PlayerModal leagueId={state.league.id} playerId={detailId} onClose={() => setDetailId(null)} />}
     </div>
   );
 }
