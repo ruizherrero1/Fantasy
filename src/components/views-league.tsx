@@ -5,6 +5,7 @@ import { Crown, Gavel, Play, Shield, Trophy } from "lucide-react";
 import { apiGet, apiPost, money, timeAgo } from "@/lib/client";
 import type { LeagueState } from "@/lib/types";
 import type { Notify } from "@/components/fantasy-app";
+import { PlayerAvatar } from "@/components/ui";
 
 type Act = (url: string, body?: unknown, method?: "POST" | "PUT") => Promise<boolean>;
 
@@ -113,8 +114,8 @@ export function MatchdayView({ state, act, notify }: { state: LeagueState; act: 
         {(last?.myPlayerPoints ?? []).slice(0, 15).map((player, index) => (
           <div key={player.playerId}>
             <b>{index + 1}</b>
-            <span className="mini-rank" />
-            <span><strong>{player.name}</strong><small>{player.starter ? "Titular" : "Banquillo"}</small></span>
+            <PlayerAvatar player={player} small />
+            <span><strong>{player.name}</strong><small>{player.team} · {player.starter ? "Titular" : "Banquillo"}</small></span>
             <em>{Math.round(player.points)} pts</em>
           </div>
         ))}

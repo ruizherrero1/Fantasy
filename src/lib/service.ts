@@ -49,7 +49,7 @@ type PlayerRow = {
   current_value: number;
   team_id: string | null;
   metadata: Record<string, unknown> | null;
-  team?: { name: string; short_name: string | null; colors: unknown } | null;
+  team?: { external_id: number; name: string; short_name: string | null; badge_url: string | null; colors: unknown } | null;
 };
 
 const MEMBER_COLORS = ["#65d5ff", "#ff708f", "#ffd166", "#b8f35a", "#c89bff", "#ff9c72", "#7dd3a8", "#f97583"];
@@ -134,6 +134,7 @@ export async function seedLaLiga(db: Db, season: number) {
         season,
         name: team.name,
         short_name: team.shortName,
+        badge_url: `https://media.api-sports.io/football/teams/${team.externalId}.png`,
         colors: [team.color],
       }, { onConflict: "external_id,season" }).select("id").single(),
       `No se pudo guardar el equipo ${team.name}`,
@@ -164,7 +165,7 @@ export async function seedLaLiga(db: Db, season: number) {
 async function fetchPlayers(db: Db, season: number): Promise<PlayerRow[]> {
   const { data, error } = await db
     .from("fantasy_players")
-    .select("id, name, position, current_value, team_id, metadata, team:fantasy_teams(name, short_name, colors)")
+    .select("id, name, position, current_value, team_id, metadata, team:fantasy_teams(external_id, name, short_name, badge_url, colors)")
     .eq("season", season)
     .gt("current_value", 0)
     .limit(2000);
@@ -472,10 +473,14 @@ export async function executeTransfer(db: Db, args: TransferArgs) {
     if (Number(buyer.budget) < amount) fail("Saldo insuficiente para completar la operación.");
     const { count } = await db.from("fantasy_squads").select("id", { count: "exact", head: true }).eq("league_member_id", buyer.id);
     if ((count ?? 0) >= args.league.squad_size + 5) fail("Tu plantilla está completa.");
+    const { data: alreadyOwned } = await db.from("fantasy_squads").select("id").eq("league_member_id", buyer.id).eq("player_id", args.playerId).maybeSingle();
+    if (alreadyOwned) fail("Ese jugador ya está en tu plantilla.");
   }
 
   if (args.fromMemberId) {
     const seller = await memberById(db, args.fromMemberId);
+    const { count } = await db.from("fantasy_squads").select("id", { count: "exact", head: true }).eq("league_member_id", seller.id);
+    if ((count ?? 0) <= 11) fail("El vendedor no puede quedarse con menos de 11 jugadores.");
     const { data: squadRow } = await db.from("fantasy_squads").select("id").eq("league_member_id", args.fromMemberId).eq("player_id", args.playerId).maybeSingle();
     if (!squadRow) fail("El vendedor ya no tiene ese jugador.");
     await db.from("fantasy_squads").delete().eq("id", squadRow.id);
@@ -764,6 +769,7 @@ function toApiPlayer(player: PlayerRow, stats: Map<string, { season: number; las
     team: player.team?.name ?? "—",
     teamShort: player.team?.short_name ?? "?",
     teamColor: teamColors[0] ?? "#3b6c4f",
+    teamLogo: player.team?.badge_url ?? (player.team?.external_id ? `https://media.api-sports.io/football/teams/${player.team.external_id}.png` : null),
     value: Number(player.current_value),
     seasonPoints: playerStats?.season ?? 0,
     lastPoints: playerStats?.last ?? null,
@@ -784,7 +790,7 @@ export async function getLeagueState(db: Db, league: LeagueRow, member: MemberRo
   }
   const player = (id: string): ApiPlayer => {
     const row = playersById.get(id);
-    return row ? toApiPlayer(row, stats) : { id, name: "Jugador", position: "MED", team: "—", teamShort: "?", teamColor: "#3b6c4f", value: 0, seasonPoints: 0, lastPoints: null };
+    return row ? toApiPlayer(row, stats) : { id, name: "Jugador", position: "MED", team: "—", teamShort: "?", teamColor: "#3b6c4f", teamLogo: null, value: 0, seasonPoints: 0, lastPoints: null };
   };
 
   const { data: memberRows } = await db
@@ -824,7 +830,7 @@ export async function getLeagueState(db: Db, league: LeagueRow, member: MemberRo
     const { data: lastLineups } = await db.from("fantasy_lineups").select("league_member_id, total_points, id").eq("matchday_id", lastFinished.id);
     lastRoundByMember = new Map((lastLineups ?? []).map((row) => [row.league_member_id as string, Number(row.total_points)]));
     const myLineup = (lastLineups ?? []).find((row) => row.league_member_id === member.id);
-    let myPlayerPoints: { playerId: string; name: string; points: number; starter: boolean }[] = [];
+    let myPlayerPoints: NonNullable<LeagueState["lastMatchday"]>["myPlayerPoints"] = [];
     if (myLineup) {
       const { data: myPlayers } = await db.from("fantasy_lineup_players").select("player_id, is_starter").eq("lineup_id", myLineup.id);
       const ids = (myPlayers ?? []).map((p) => p.player_id as string);
@@ -833,12 +839,19 @@ export async function getLeagueState(db: Db, league: LeagueRow, member: MemberRo
         : { data: [] };
       const pointsByPlayer = new Map((scores ?? []).map((s) => [s.player_id as string, Number(s.points)]));
       myPlayerPoints = (myPlayers ?? [])
-        .map((p) => ({
-          playerId: p.player_id as string,
-          name: playersById.get(p.player_id as string)?.name ?? "Jugador",
-          points: pointsByPlayer.get(p.player_id as string) ?? 0,
-          starter: Boolean(p.is_starter),
-        }))
+        .map((p) => {
+          const apiPlayer = player(p.player_id as string);
+          return {
+            playerId: p.player_id as string,
+            name: apiPlayer.name,
+            team: apiPlayer.team,
+            teamShort: apiPlayer.teamShort,
+            teamColor: apiPlayer.teamColor,
+            teamLogo: apiPlayer.teamLogo,
+            points: pointsByPlayer.get(p.player_id as string) ?? 0,
+            starter: Boolean(p.is_starter),
+          };
+        })
         .sort((a, b) => Number(b.starter) - Number(a.starter) || b.points - a.points);
     }
     lastMatchday = {

@@ -1,11 +1,30 @@
 "use client";
 
+import Image from "next/image";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { initials } from "@/lib/client";
 import type { ApiPlayer } from "@/lib/types";
 
-export function PlayerAvatar({ player, small = false }: { player: Pick<ApiPlayer, "name" | "teamColor">; small?: boolean }) {
-  return <span className={`player-avatar ${small ? "small" : ""}`} style={{ background: player.teamColor, color: contrast(player.teamColor) }}>{initials(player.name)}</span>;
+export function PlayerAvatar({ player, small = false }: { player: Pick<ApiPlayer, "name" | "team" | "teamColor" | "teamLogo">; small?: boolean }) {
+  return (
+    <span
+      className={`player-avatar ${small ? "small" : ""}`}
+      style={{ background: player.teamColor, color: contrast(player.teamColor) }}
+      title={player.team}
+    >
+      {initials(player.name)}
+      {player.teamLogo ? (
+        <Image
+          src={player.teamLogo}
+          alt={`Escudo de ${player.team}`}
+          width={small ? 28 : 38}
+          height={small ? 28 : 38}
+          unoptimized
+          onError={(event) => { event.currentTarget.style.display = "none"; }}
+        />
+      ) : null}
+    </span>
+  );
 }
 
 function contrast(hex: string) {

@@ -65,6 +65,7 @@ export type ApiPlayer = {
   team: string;
   teamShort: string;
   teamColor: string;
+  teamLogo: string | null;
   value: number;
   seasonPoints: number;
   lastPoints: number | null;
@@ -154,7 +155,11 @@ export type LeagueState = {
   lastMatchday: {
     number: number;
     memberPoints: { memberId: string; points: number }[];
-    myPlayerPoints: { playerId: string; name: string; points: number; starter: boolean }[];
+    myPlayerPoints: Array<Pick<ApiPlayer, "name" | "team" | "teamShort" | "teamColor" | "teamLogo"> & {
+      playerId: string;
+      points: number;
+      starter: boolean;
+    }>;
   } | null;
   activity: ActivityItem[];
 };

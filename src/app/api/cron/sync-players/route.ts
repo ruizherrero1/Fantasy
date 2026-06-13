@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   const supabase = getSupabaseAdmin();
-  if (!supabase) return NextResponse.json({ error: "Supabase no estÃ¡ configurado" }, { status: 503 });
+  if (!supabase) return NextResponse.json({ error: "Supabase no está configurado" }, { status: 503 });
 
   const season = Number(process.env.API_FOOTBALL_SEASON || "2025");
   const league = process.env.API_FOOTBALL_LALIGA_ID || "140";
@@ -38,9 +38,33 @@ export async function POST(request: NextRequest) {
     if (!stats?.team?.id) continue;
     const { data: team, error: teamError } = await supabase.from("fantasy_teams").upsert({ external_id: stats.team.id, competition_external_id: Number(league), season, name: stats.team.name, badge_url: stats.team.logo }, { onConflict: "external_id,season" }).select("id").single();
     if (teamError || !team) continue;
-    const { data: player, error: playerError } = await supabase.from("fantasy_players").upsert({ external_id: entry.player.id, team_id: team.id, season, name: entry.player.name, common_name: entry.player.name, position: fantasyPosition(stats.games.position), photo_url: entry.player.photo, status: entry.player.injured ? "injured" : "available", metadata: { provider: "api-football", appearances: stats.games.appearences, rating: stats.games.rating } }, { onConflict: "external_id,season" }).select("id").single();
+    const value = initialValue(entry);
+    const { data: existing } = await supabase
+      .from("fantasy_players")
+      .select("current_value, metadata")
+      .eq("external_id", entry.player.id)
+      .eq("season", season)
+      .maybeSingle();
+    const { data: player, error: playerError } = await supabase.from("fantasy_players").upsert({
+      external_id: entry.player.id,
+      team_id: team.id,
+      season,
+      name: entry.player.name,
+      common_name: entry.player.name,
+      position: fantasyPosition(stats.games.position),
+      photo_url: entry.player.photo,
+      status: entry.player.injured ? "injured" : "available",
+      current_value: existing ? Number(existing.current_value) : value,
+      metadata: {
+        ...((existing?.metadata as Record<string, unknown> | null) ?? {}),
+        provider: "api-football",
+        appearances: stats.games.appearences,
+        rating: stats.games.rating,
+        baseValue: (existing?.metadata as Record<string, unknown> | null)?.baseValue ?? value,
+      },
+    }, { onConflict: "external_id,season" }).select("id").single();
     if (playerError || !player) continue;
-    await supabase.from("fantasy_player_values").insert({ player_id: player.id, value: initialValue(entry) });
+    await supabase.from("fantasy_player_values").insert({ player_id: player.id, value: existing ? Number(existing.current_value) : value });
     synced += 1;
   }
 
